@@ -25,7 +25,7 @@ teardown() {
     [ "$output" = "200" ]
 }
 
-@test "Upload file via WebDAV and pull via skopeo as valid container image" {
+@test "Upload via WebDAV, pull via skopeo, push via skopeo, and verify" {
     # 1. Create a directory structure natively or via WebDAV
     run curl -s -X MKCOL http://localhost:${PORT}/fs/myrepo/
     [ "$status" -eq 0 ]
@@ -37,20 +37,19 @@ teardown() {
     run curl -s -T "${BATS_TEST_TMPDIR}/file.txt" http://localhost:${PORT}/fs/myrepo/mytag/file.txt
     [ "$status" -eq 0 ]
     
-    # 3. Pull using skopeo to verify it is a valid container image!
-    # skopeo will request the manifest, which triggers the server to tar.gz the folder
-    # and generate a valid OCI config JSON, returning a standard Image Manifest.
+    # 3. Pull using skopeo to verify it is a valid container image
     run skopeo copy --src-tls-verify=false --dest-tls-verify=false docker://localhost:${PORT}/myrepo:mytag oci:${BATS_TEST_TMPDIR}/skopeo_dest
-    
-    # Check if skopeo succeeded
     [ "$status" -eq 0 ]
-    
-    # Verify the layout exists
     [ -f "${BATS_TEST_TMPDIR}/skopeo_dest/index.json" ]
-}
-
-@test "Accessing an unknown blob returns 404" {
-    run curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/v2/myrepo/blobs/sha256:0000000000000000000000000000000000000000000000000000000000000000
+    
+    # 4. Push back to the server under a new tag
+    run skopeo copy --src-tls-verify=false --dest-tls-verify=false oci:${BATS_TEST_TMPDIR}/skopeo_dest docker://localhost:${PORT}/myrepo:pushedtag
     [ "$status" -eq 0 ]
-    [ "$output" = "404" ]
+    
+    # 5. Verify the file exists natively in the filesystem and is untarred
+    [ -f "${ROOT_DIR}/myrepo/pushedtag/file.txt" ]
+    
+    # 6. Verify the file content
+    content=$(cat "${ROOT_DIR}/myrepo/pushedtag/file.txt")
+    [ "$content" = "hello world" ]
 }

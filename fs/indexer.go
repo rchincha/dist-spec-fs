@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -189,7 +190,134 @@ func (i *Indexer) ArchiveDirectory(repo, tag string) (config BlobInfo, layer Blo
 func (i *Indexer) GetPath(digest string) (string, bool) {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
-	
+
 	path, ok := i.digestToPath[digest]
 	return path, ok
+}
+
+// ExtractImage extracts the given layer digests (which must exist in the cache as tar.gz files)
+// into the physical directory for the repo and tag.
+func (i *Indexer) ExtractImage(repo, tag string, layerDigests []string) error {
+	dirPath := filepath.Join(i.rootDir, repo, tag)
+	if err := os.MkdirAll(dirPath, 0755); err != nil {
+		return err
+	}
+
+	for _, digest := range layerDigests {
+		path, ok := i.GetPath(digest)
+		if !ok {
+			// Try to guess path based on cache layout
+			cachePath := filepath.Join(i.cacheDir, "layers", digest+".tar.gz")
+			if _, err := os.Stat(cachePath); err == nil {
+				path = cachePath
+			} else {
+				return fmt.Errorf("layer %s not found in cache", digest)
+			}
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+
+		gzReader, err := gzip.NewReader(f)
+		if err != nil {
+			f.Close()
+			return err
+		}
+
+		tarReader := tar.NewReader(gzReader)
+		for {
+			header, err := tarReader.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				gzReader.Close()
+				f.Close()
+				return err
+			}
+
+			// Security: prevent path traversal
+			if strings.Contains(header.Name, "..") {
+				continue
+			}
+
+			targetPath := filepath.Join(dirPath, header.Name)
+
+			switch header.Typeflag {
+			case tar.TypeDir:
+				if err := os.MkdirAll(targetPath, 0755); err != nil {
+					return err
+				}
+			case tar.TypeReg:
+				// Ensure parent directory exists
+				if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+					return err
+				}
+
+				outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
+				if err != nil {
+					return err
+				}
+				if _, err := io.Copy(outFile, tarReader); err != nil {
+					outFile.Close()
+					return err
+				}
+				outFile.Close()
+			}
+		}
+		gzReader.Close()
+		f.Close()
+	}
+
+	return nil
+}
+
+// SaveBlob saves a raw blob to the cache and indexes it.
+func (i *Indexer) SaveBlob(digest string, reader io.Reader) error {
+	tempPath := filepath.Join(i.cacheDir, "layers", fmt.Sprintf("upload_%d.tmp", time.Now().UnixNano()))
+	f, err := os.Create(tempPath)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tempPath)
+
+	hasher := sha256.New()
+	writer := io.MultiWriter(f, hasher)
+
+	if _, err := io.Copy(writer, reader); err != nil {
+		f.Close()
+		return err
+	}
+	f.Close()
+
+	computedDigest := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+	if digest != computedDigest {
+		return fmt.Errorf("digest mismatch: expected %s, got %s", digest, computedDigest)
+	}
+
+	finalPath := filepath.Join(i.cacheDir, "layers", digest+".tar.gz") // We assume it's a tar.gz for layers, configs will just have this extension too but it doesn't matter for storage
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		return err
+	}
+
+	i.mu.Lock()
+	i.digestToPath[digest] = finalPath
+	i.mu.Unlock()
+
+	return nil
+}
+
+// GetCachePath returns the physical path in the cache for a given digest.
+func (i *Indexer) GetCachePath(digest string) string {
+	// We assume layers/configs are mixed or we just check both.
+	// For simplicity, layer blobs are in layers/ and config blobs in configs/
+	// Since both are accessed by digest, checking both is easy.
+	p := filepath.Join(i.cacheDir, "layers", digest+".tar.gz")
+	if _, err := os.Stat(p); err == nil {
+		return p
+	}
+	p = filepath.Join(i.cacheDir, "configs", digest+".json")
+	return p
 }

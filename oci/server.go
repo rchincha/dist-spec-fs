@@ -2,6 +2,8 @@ package oci
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -26,15 +28,33 @@ func NewServer(rootDir string, indexer *fs.Indexer) *Server {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
+	w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
+
 	if path == "/v2/" || path == "/v2" {
-		w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	if strings.Contains(path, "/manifests/") {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
-			s.handleManifests(w, r)
+			s.handleManifestsGet(w, r)
+			return
+		}
+		if r.Method == http.MethodPut {
+			s.handleManifestsPut(w, r)
+			return
+		}
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if strings.Contains(path, "/blobs/uploads/") {
+		if r.Method == http.MethodPost {
+			s.handleBlobUploadPost(w, r)
+			return
+		}
+		if r.Method == http.MethodPut {
+			s.handleBlobUploadPut(w, r)
 			return
 		}
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -43,7 +63,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if strings.Contains(path, "/blobs/") {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
-			s.handleBlobs(w, r)
+			s.handleBlobsGet(w, r)
 			return
 		}
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -53,32 +73,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-func (s *Server) handleManifests(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 5 {
-		http.Error(w, "invalid path", http.StatusBadRequest)
-		return
-	}
+func (s *Server) handleManifestsGet(w http.ResponseWriter, r *http.Request) {
+	repo, tag := extractRepoAndTag(r.URL.Path, "manifests")
 
-	v2Idx := -1
-	manifestsIdx := -1
-	for i, p := range parts {
-		if p == "v2" {
-			v2Idx = i
-		} else if p == "manifests" {
-			manifestsIdx = i
-		}
-	}
-
-	if v2Idx == -1 || manifestsIdx == -1 || manifestsIdx <= v2Idx+1 || manifestsIdx == len(parts)-1 {
-		http.Error(w, "invalid manifest path", http.StatusBadRequest)
-		return
-	}
-
-	repo := strings.Join(parts[v2Idx+1:manifestsIdx], "/")
-	tag := parts[len(parts)-1]
-
-	// Dynamically generate the container image layers and config
 	configBlob, layerBlob, err := s.indexer.ArchiveDirectory(repo, tag)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -126,27 +123,127 @@ func (s *Server) handleManifests(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
-	w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
 	if r.Method == http.MethodGet {
 		w.Write(manifestBytes)
 	}
 }
 
-func (s *Server) handleBlobs(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleBlobsGet(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 5 {
-		http.Error(w, "invalid path", http.StatusBadRequest)
-		return
-	}
-
 	digest := parts[len(parts)-1]
 
 	path, ok := s.indexer.GetPath(digest)
 	if !ok {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"errors":[{"code":"BLOB_UNKNOWN","message":"blob unknown"}]}`))
-		return
+		// Attempt to resolve directly from cache
+		// This is useful if a push happened but the in-memory index was lost due to restart
+		cachePath := s.indexer.GetCachePath(digest)
+		if _, err := os.Stat(cachePath); err == nil {
+			path = cachePath
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"errors":[{"code":"BLOB_UNKNOWN","message":"blob unknown"}]}`))
+			return
+		}
 	}
 
 	http.ServeFile(w, r, path)
+}
+
+func (s *Server) handleBlobUploadPost(w http.ResponseWriter, r *http.Request) {
+	repo := extractRepo(r.URL.Path, "blobs")
+	uuid := "upload-session-uuid" // Simplified for monolithic PUT uploads
+	
+	w.Header().Set("Location", fmt.Sprintf("/v2/%s/blobs/uploads/%s", repo, uuid))
+	w.Header().Set("Range", "0-0")
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) handleBlobUploadPut(w http.ResponseWriter, r *http.Request) {
+	digest := r.URL.Query().Get("digest")
+	if digest == "" {
+		http.Error(w, "digest query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.indexer.SaveBlob(digest, r.Body); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	repo := extractRepo(r.URL.Path, "blobs")
+	w.Header().Set("Location", fmt.Sprintf("/v2/%s/blobs/%s", repo, digest))
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (s *Server) handleManifestsPut(w http.ResponseWriter, r *http.Request) {
+	repo, tag := extractRepoAndTag(r.URL.Path, "manifests")
+
+	var manifest struct {
+		Layers []struct {
+			Digest string `json:"digest"`
+		} `json:"layers"`
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := json.Unmarshal(body, &manifest); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var layerDigests []string
+	for _, l := range manifest.Layers {
+		layerDigests = append(layerDigests, l.Digest)
+	}
+
+	if err := s.indexer.ExtractImage(repo, tag, layerDigests); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Location", fmt.Sprintf("/v2/%s/manifests/%s", repo, tag))
+	w.WriteHeader(http.StatusCreated)
+}
+
+// Helpers
+func extractRepo(path, marker string) string {
+	parts := strings.Split(path, "/")
+	start := 0
+	end := 0
+	for i, p := range parts {
+		if p == "v2" {
+			start = i + 1
+		} else if p == marker {
+			end = i
+			break
+		}
+	}
+	if start >= end {
+		return ""
+	}
+	return strings.Join(parts[start:end], "/")
+}
+
+func extractRepoAndTag(path, marker string) (string, string) {
+	parts := strings.Split(path, "/")
+	start := 0
+	end := 0
+	for i, p := range parts {
+		if p == "v2" {
+			start = i + 1
+		} else if p == marker {
+			end = i
+			break
+		}
+	}
+	if start >= end {
+		return "", ""
+	}
+	repo := strings.Join(parts[start:end], "/")
+	tag := parts[len(parts)-1]
+	return repo, tag
 }

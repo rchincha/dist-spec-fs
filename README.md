@@ -8,13 +8,14 @@ It allows you to use a single highly-available storage backend (like ZFS, BTRFS,
 
 ## How it works
 
-When a user creates a folder (e.g., `myrepo/mytag`) and places files in it via the WebDAV mount, `dist-spec-fs` dynamically compiles this folder into a **valid OCI Container Image**. 
+`dist-spec-fs` is bi-directional:
 
-When an OCI client requests the manifest for `myrepo:mytag`, the server dynamically:
-1. Archives the folder into a `.tar.gz` layer.
-2. Generates a valid OCI Image Configuration JSON.
-3. Caches these blobs locally to efficiently serve them.
-4. Returns a standard OCI Image Manifest containing the exact size and digest of the compressed archive and config.
+**1. Filesystem -> OCI (Pull)**:
+When a user creates a folder (e.g., `myrepo/mytag`) and places files in it via the WebDAV mount, `dist-spec-fs` dynamically compiles this folder into a **valid OCI Container Image**. 
+When an OCI client requests the manifest, the server dynamically archives the folder into a `.tar.gz` layer, generates a valid OCI Image Configuration JSON, caches these blobs, and returns the manifest.
+
+**2. OCI -> Filesystem (Push)**:
+When a user pushes an image using an OCI tool (like `skopeo`), the server accepts the `.tar.gz` layer blobs into its cache. Once the manifest is uploaded, the server automatically un-tars and un-gzips the layers directly into the physical filesystem folder (`/repo/tag/`). The files are immediately visible and editable via the WebDAV mount!
 
 ## Building and Running
 
@@ -55,7 +56,15 @@ Using [ORAS](https://oras.land/):
 oras pull localhost:8080/myrepo:mytag
 ```
 
-This will successfully download the folder as a container image!
+### 3. Push via OCI
+
+Because `dist-spec-fs` is bi-directional, you can push images to it!
+
+```sh
+skopeo copy oci:./my_oci_image docker://localhost:8080/myrepo:pushed_tag
+```
+
+Once pushed, the server automatically extracts the layers. You can immediately browse to `http://localhost:8080/fs/myrepo/pushed_tag` to view or edit the raw files!
 
 ## Documentation
 
