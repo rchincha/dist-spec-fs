@@ -8,40 +8,47 @@ It allows you to use a single highly-available storage backend (like ZFS, BTRFS,
 
 ```mermaid
 flowchart TB
-    subgraph TopLane[ ]
-        direction LR
-        Client["WebDAV client\n(Finder, davfs, curl)"] -- "mkdir (MKCOL)\nread/write (GET, PUT)\ndelete (DELETE)" --> WebDAV["WebDAV endpoint\n/fs/"]
-    end
+    Client["WebDAV client\n(Finder, davfs, curl)"]
 
-    subgraph BottomLane[ ]
-        direction LR
-        OCI["OCI dist-spec endpoint\n/v2/"] -- "pull manifest + layers" --> Kind
-    end
-
-    subgraph Kind["kind cluster"]
+    subgraph Storage["dist-spec-fs storage backend"]
         direction TB
-        Containerd["node containerd"]
-        Pod1["Pod\nimage: myrepo:mytag"]
-        Pod2["Pod\nimage: myrepo:latest"]
-        Containerd --> Pod1
-        Containerd --> Pod2
-    end
-
-    subgraph MidStorage["dist-spec-fs storage backend"]
-        direction TB
+        WebDAVEndpoint["WebDAV endpoint\n/fs/"]
         Repo["myrepo/"]
         Tag["mytag/"]
         Latest["latest\n(symlink -> mytag)"]
         File1["hello.txt"]
         File2["app"]
+        OCIEndpoint["OCI dist-spec endpoint\n/v2/"]
+
+        WebDAVEndpoint --> Repo
         Repo --> Tag
         Repo -.-> Latest
         Tag --> File1
         Tag --> File2
+        Tag --> OCIEndpoint
+        File1 ~~~ OCIEndpoint
+        File2 ~~~ OCIEndpoint
     end
 
-    WebDAV --> Repo
-    OCI --> Repo
+    subgraph KindCluster["kind cluster"]
+        direction TB
+        Pod["Pod\nimage: myrepo:mytag"]
+    end
+
+    Client -- "mkdir (MKCOL)\nread/write (GET, PUT)\ndelete (DELETE)" --> WebDAVEndpoint
+    OCIEndpoint -- "pull manifest + layers" --> Pod
+
+    style Client fill:#ffffff,color:#000000,stroke:#004085,stroke-width:2px
+    style Storage fill:#ffffff,color:#000000,stroke:#ff8f00,stroke-width:2px
+    style WebDAVEndpoint fill:#ffffff,color:#000000,stroke:#155724,stroke-width:2px
+    style OCIEndpoint fill:#ffffff,color:#000000,stroke:#155724,stroke-width:2px
+    style KindCluster fill:#ffffff,color:#000000,stroke:#721c24,stroke-width:2px
+    style Pod fill:#ffffff,color:#000000,stroke:#0c5460,stroke-width:2px
+    style Repo fill:#ffffff,color:#000000,stroke:#6f42c1,stroke-width:2px
+    style Tag fill:#ffffff,color:#000000,stroke:#6f42c1,stroke-width:2px
+    style Latest fill:#ffffff,color:#000000,stroke:#6f42c1,stroke-width:2px
+    style File1 fill:#ffffff,color:#000000,stroke:#6f42c1,stroke-width:2px
+    style File2 fill:#ffffff,color:#000000,stroke:#6f42c1,stroke-width:2px
 ```
 
 A folder created over WebDAV (`myrepo/mytag/`) is what the dist-spec endpoint serves as an OCI image; a tag can also be a symlink to another tag's folder (`latest -> mytag`), the filesystem equivalent of a registry's moving `latest` tag. See [test/scripts/](test/scripts/) for a runnable demo of this end-to-end against a local [kind](https://kind.sigs.k8s.io/) cluster.
