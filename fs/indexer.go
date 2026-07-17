@@ -29,6 +29,7 @@ type Indexer struct {
 	cacheDir     string
 	mu           sync.RWMutex
 	digestToPath map[string]string // Maps "sha256:abcd..." to cached physical file
+	manifests    map[string][]byte // Maps manifest digest to its generated JSON bytes
 }
 
 // NewIndexer creates a new concurrent-safe Indexer and ensures cache directories exist.
@@ -45,6 +46,7 @@ func NewIndexer(rootDir string) (*Indexer, error) {
 		rootDir:      rootDir,
 		cacheDir:     cacheDir,
 		digestToPath: make(map[string]string),
+		manifests:    make(map[string][]byte),
 	}, nil
 }
 
@@ -97,6 +99,11 @@ func (i *Indexer) ArchiveDirectory(repo, tag string) (config BlobInfo, layer Blo
 			return BlobInfo{}, BlobInfo{}, err
 		}
 		header.Name = entry.Name() // ensure relative path in tar
+		// WebDAV PUT always writes files as 0644 (the protocol has no chmod),
+		// so a file can never carry the executable bit by the time it lands
+		// here. Force it on so folders assembled over WebDAV can still be
+		// run as container entrypoints.
+		header.Mode = 0755
 
 		if err := tarWriter.WriteHeader(header); err != nil {
 			return BlobInfo{}, BlobInfo{}, err
@@ -184,6 +191,23 @@ func (i *Indexer) ArchiveDirectory(repo, tag string) (config BlobInfo, layer Blo
 	i.mu.Unlock()
 
 	return config, layer, nil
+}
+
+// SaveManifest caches generated manifest JSON bytes under their own digest so
+// clients that resolve a tag to a digest (e.g. containerd) can subsequently
+// fetch the identical content via GET /v2/<repo>/manifests/<digest>.
+func (i *Indexer) SaveManifest(digest string, data []byte) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.manifests[digest] = data
+}
+
+// GetManifest looks up previously cached manifest JSON bytes by digest.
+func (i *Indexer) GetManifest(digest string) ([]byte, bool) {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	data, ok := i.manifests[digest]
+	return data, ok
 }
 
 // GetPath looks up the physical cached file path for a given OCI blob digest.

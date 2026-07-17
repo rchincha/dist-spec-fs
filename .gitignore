@@ -22,3 +22,6 @@ go.work.sum
 # Local data and cache directories
 data/
 .cache/
+
+# Downloaded pinned tool binaries (see `make tools`)
+hack/tools/bin/

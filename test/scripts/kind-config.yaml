@@ -1,0 +1,9 @@
+# kind cluster config enabling containerd's registry config_path, per
+# https://kind.sigs.k8s.io/docs/user/local-registry/
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: dist-spec-fs
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry]
+    config_path = "/etc/containerd/certs.d"

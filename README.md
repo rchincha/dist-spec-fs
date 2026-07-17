@@ -6,6 +6,46 @@ It allows you to use a single highly-available storage backend (like ZFS, BTRFS,
 1. **As a Remote Filesystem**: Mountable via standard WebDAV on Windows, macOS, and Linux.
 2. **As an OCI Registry**: Accessible via the dist-spec `/v2/` API, allowing container ecosystem tools (like `oras`) to pull data directly.
 
+```mermaid
+flowchart TB
+    subgraph TopLane[ ]
+        direction LR
+        Client["WebDAV client\n(Finder, davfs, curl)"] -- "mkdir (MKCOL)\nread/write (GET, PUT)\ndelete (DELETE)" --> WebDAV["WebDAV endpoint\n/fs/"]
+    end
+
+    subgraph BottomLane[ ]
+        direction LR
+        OCI["OCI dist-spec endpoint\n/v2/"] -- "pull manifest + layers" --> Kind
+    end
+
+    subgraph Kind["kind cluster"]
+        direction TB
+        Containerd["node containerd"]
+        Pod1["Pod\nimage: myrepo:mytag"]
+        Pod2["Pod\nimage: myrepo:latest"]
+        Containerd --> Pod1
+        Containerd --> Pod2
+    end
+
+    subgraph MidStorage["dist-spec-fs storage backend"]
+        direction TB
+        Repo["myrepo/"]
+        Tag["mytag/"]
+        Latest["latest\n(symlink -> mytag)"]
+        File1["hello.txt"]
+        File2["app"]
+        Repo --> Tag
+        Repo -.-> Latest
+        Tag --> File1
+        Tag --> File2
+    end
+
+    WebDAV --> Repo
+    OCI --> Repo
+```
+
+A folder created over WebDAV (`myrepo/mytag/`) is what the dist-spec endpoint serves as an OCI image; a tag can also be a symlink to another tag's folder (`latest -> mytag`), the filesystem equivalent of a registry's moving `latest` tag. See [test/scripts/](test/scripts/) for a runnable demo of this end-to-end against a local [kind](https://kind.sigs.k8s.io/) cluster.
+
 ## How it works
 
 `dist-spec-fs` is bi-directional:

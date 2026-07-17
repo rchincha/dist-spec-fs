@@ -2,6 +2,7 @@ package oci
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -76,7 +77,27 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleManifestsGet(w http.ResponseWriter, r *http.Request) {
-	repo, tag := extractRepoAndTag(r.URL.Path, "manifests")
+	repo, ref := extractRepoAndTag(r.URL.Path, "manifests")
+
+	// Clients that resolve a tag to its digest (e.g. containerd's remotes/docker
+	// resolver) re-fetch manifest content by digest rather than by tag. Since
+	// manifests are generated on the fly rather than stored under repo/tag/,
+	// serve previously generated content straight from the digest cache here.
+	if strings.HasPrefix(ref, "sha256:") {
+		data, ok := s.indexer.GetManifest(ref)
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"errors":[{"code":"MANIFEST_UNKNOWN","message":"manifest unknown"}]}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+		w.Header().Set("Docker-Content-Digest", ref)
+		if r.Method == http.MethodGet {
+			w.Write(data)
+		}
+		return
+	}
+	tag := ref
 
 	configBlob, layerBlob, err := s.indexer.ArchiveDirectory(repo, tag)
 	if err != nil {
@@ -130,7 +151,12 @@ func (s *Server) handleManifestsGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	manifestSum := sha256.Sum256(manifestBytes)
+	manifestDigest := "sha256:" + hex.EncodeToString(manifestSum[:])
+	s.indexer.SaveManifest(manifestDigest, manifestBytes)
+
 	w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+	w.Header().Set("Docker-Content-Digest", manifestDigest)
 	if r.Method == http.MethodGet {
 		w.Write(manifestBytes)
 	}

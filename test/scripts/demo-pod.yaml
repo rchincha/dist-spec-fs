@@ -1,0 +1,21 @@
+# A Pod whose image is dynamically compiled by dist-spec-fs from files
+# dropped into myrepo/mytag/ over WebDAV (see webdav-demo.sh).
+#
+# dist-spec-fs archives raw directory contents into a layer with no
+# accompanying OS or shell, and the generated image config sets no
+# Cmd/Entrypoint. `command` below must therefore point at a real static
+# binary that was uploaded alongside the payload (see main.go in
+# webdav-demo.sh) instead of relying on a shell.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dist-spec-fs-demo
+  labels:
+    app: dist-spec-fs-demo
+spec:
+  containers:
+    - name: demo
+      image: localhost:5001/myrepo:mytag
+      imagePullPolicy: Always
+      command: ["/app"]
+  restartPolicy: Never
