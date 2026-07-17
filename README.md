@@ -42,29 +42,31 @@ You can mount this using your OS's native tools:
 
 Once mounted, create a directory structure like `myrepo/mytag` and copy a file `hello.txt` into it.
 
-### 2. Read via OCI (ORAS, Skopeo, Docker)
+### 2. Read via OCI (ORAS, Skopeo)
 
 Now that the file exists on the filesystem, you can pull the folder as a container image using standard OCI tools.
 
-Using [Skopeo](https://github.com/containers/skopeo):
+Using [Skopeo](https://github.com/containers/skopeo). Since the server runs over plain HTTP, pass `--src-tls-verify=false` so skopeo doesn't try HTTPS against it:
 ```sh
-skopeo copy docker://localhost:8080/myrepo:mytag oci:./my_oci_image
+skopeo copy --src-tls-verify=false docker://localhost:8080/myrepo:mytag oci:./my_oci_image
 ```
 
-Using [ORAS](https://oras.land/):
+Using [ORAS](https://oras.land/), pass `--plain-http` for the same reason. Since the folder is archived as a single `.tar.gz` layer rather than one blob per file, `oras pull` downloads it as `mytag.tar.gz` instead of extracting it:
 ```sh
-oras pull localhost:8080/myrepo:mytag
+oras pull --plain-http localhost:8080/myrepo:mytag
 ```
 
 ### 3. Push via OCI
 
-Because `dist-spec-fs` is bi-directional, you can push images to it!
+Because `dist-spec-fs` is bi-directional, you can push images to it! Use `--dest-tls-verify=false` since the server is plain HTTP:
 
 ```sh
-skopeo copy oci:./my_oci_image docker://localhost:8080/myrepo:pushed_tag
+skopeo copy --dest-tls-verify=false oci:./my_oci_image docker://localhost:8080/myrepo:pushed_tag
 ```
 
 Once pushed, the server automatically extracts the layers. You can immediately browse to `http://localhost:8080/fs/myrepo/pushed_tag` to view or edit the raw files!
+
+> **Note:** `oras push` of individual files isn't supported for the extract-to-filesystem behavior — by default it uploads each file as its own uncompressed blob rather than a `.tar.gz` layer, which the server can't un-tar. Use `skopeo` (or another tool that produces `application/vnd.oci.image.layer.v1.tar+gzip` layers) to push.
 
 ## Documentation
 

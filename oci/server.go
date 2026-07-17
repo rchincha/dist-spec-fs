@@ -1,6 +1,8 @@
 package oci
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -112,6 +114,12 @@ func (s *Server) handleManifestsGet(w http.ResponseWriter, r *http.Request) {
 				MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
 				Digest:    layerBlob.Digest,
 				Size:      layerBlob.Size,
+				Annotations: map[string]string{
+					// Lets generic OCI artifact clients (e.g. oras pull) know
+					// what filename to write the layer blob to; without it
+					// they skip the layer entirely.
+					"org.opencontainers.image.title": tag + ".tar.gz",
+				},
 			},
 		},
 	}
@@ -151,11 +159,28 @@ func (s *Server) handleBlobsGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBlobUploadPost(w http.ResponseWriter, r *http.Request) {
 	repo := extractRepo(r.URL.Path, "blobs")
-	uuid := "upload-session-uuid" // Simplified for monolithic PUT uploads
-	
-	w.Header().Set("Location", fmt.Sprintf("/v2/%s/blobs/uploads/%s", repo, uuid))
+
+	session, err := newUploadSession()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Location", fmt.Sprintf("/v2/%s/blobs/uploads/%s", repo, session))
 	w.Header().Set("Range", "0-0")
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// newUploadSession returns a random session ID for a blob upload.
+// Each POST gets its own ID so Location headers don't collide across
+// concurrent pushes; the ID isn't otherwise tracked since uploads are
+// monolithic single PUTs identified by their digest.
+func newUploadSession() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func (s *Server) handleBlobUploadPut(w http.ResponseWriter, r *http.Request) {

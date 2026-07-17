@@ -238,12 +238,14 @@ func (i *Indexer) ExtractImage(repo, tag string, layerDigests []string) error {
 				return err
 			}
 
-			// Security: prevent path traversal
-			if strings.Contains(header.Name, "..") {
+			targetPath := filepath.Join(dirPath, header.Name)
+
+			// Security: reject entries that would extract outside dirPath
+			// (e.g. "../../etc/passwd" or an absolute path), regardless of
+			// how filepath.Join normalizes them.
+			if !isWithinDir(targetPath, dirPath) {
 				continue
 			}
-
-			targetPath := filepath.Join(dirPath, header.Name)
 
 			switch header.Typeflag {
 			case tar.TypeDir:
@@ -272,6 +274,17 @@ func (i *Indexer) ExtractImage(repo, tag string, layerDigests []string) error {
 	}
 
 	return nil
+}
+
+// isWithinDir reports whether target is dir itself or a descendant of it,
+// guarding against tar entries (e.g. "../../etc/passwd" or absolute paths)
+// that would otherwise extract outside the target directory.
+func isWithinDir(target, dir string) bool {
+	rel, err := filepath.Rel(dir, target)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // SaveBlob saves a raw blob to the cache and indexes it.
