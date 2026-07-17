@@ -37,6 +37,15 @@ else
   echo "    already exists"
 fi
 
+echo "==> Waiting for the default ServiceAccount (kube-controller-manager needs a moment after cluster creation)"
+for i in $(seq 1 30); do
+  if kubectl --context "kind-${CLUSTER_NAME}" get serviceaccount default >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+kubectl --context "kind-${CLUSTER_NAME}" get serviceaccount default >/dev/null
+
 echo "==> Wiring node containerd: localhost:${REGISTRY_PORT} -> http://${REGISTRY_NAME}:8080"
 REGISTRY_DIR="/etc/containerd/certs.d/localhost:${REGISTRY_PORT}"
 for node in $(kind get nodes --name "${CLUSTER_NAME}"); do
