@@ -18,19 +18,32 @@ setup() {
 
 teardown() {
     if [ "${RUN_KIND_TESTS:-}" = "1" ]; then
+        # Surfaced only when the test failed (bats suppresses stdout for
+        # passing tests) - gives CI logs something to debug from instead of
+        # a bare "status != 0" with no context.
+        echo "==> Debug: pods"
+        kubectl --context "kind-dist-spec-fs" get pods -A -o wide 2>&1 || true
+        echo "==> Debug: registry container log (tail)"
+        docker logs --tail=100 dist-spec-fs-registry 2>&1 || true
+        echo "==> Debug: docker ps"
+        docker ps -a 2>&1 || true
+
         "${REPO_ROOT}/test/scripts/teardown-kind-registry.sh" || true
     fi
 }
 
 @test "create files via WebDAV and launch them as a container in kind" {
     run "${REPO_ROOT}/test/scripts/setup-kind-registry.sh"
+    echo "$output"
     [ "$status" -eq 0 ]
 
     run "${REPO_ROOT}/test/scripts/webdav-demo.sh" "hello from bats"
+    echo "$output"
     [ "$status" -eq 0 ]
     [[ "$output" == *"hello from bats"* ]]
 
     run kubectl --context "kind-dist-spec-fs" get pod dist-spec-fs-demo -o jsonpath='{.status.phase}'
+    echo "$output"
     [ "$status" -eq 0 ]
     [ "$output" = "Running" ]
 
@@ -38,10 +51,12 @@ teardown() {
     # backend and launches a second pod from the "latest" tag as proof the
     # symlink resolves to the same content.
     run kubectl --context "kind-dist-spec-fs" get pod dist-spec-fs-demo-latest -o jsonpath='{.status.phase}'
+    echo "$output"
     [ "$status" -eq 0 ]
     [ "$output" = "Running" ]
 
     run kubectl --context "kind-dist-spec-fs" logs dist-spec-fs-demo-latest
+    echo "$output"
     [ "$status" -eq 0 ]
     [[ "$output" == *"hello from bats"* ]]
 }
