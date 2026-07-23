@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/dist-spec-fs/fs"
-	"github.com/dist-spec-fs/oci"
-	"github.com/dist-spec-fs/webdav"
+	"github.com/saor/fs"
+	"github.com/saor/oci"
+	"github.com/saor/webdav"
 )
 
 func main() {
@@ -49,7 +49,7 @@ func main() {
 	mux.Handle("/v2/", ociServer)
 
 	// Log startup configuration for debugging and user visibility.
-	log.Printf("Starting dist-spec-fs server on :%s", port)
+	log.Printf("Starting saor server on :%s", port)
 	log.Printf("Root Directory: %s", rootDir)
 	log.Printf("WebDAV endpoint: http://localhost:%s/fs/", port)
 	log.Printf("OCI dist-spec endpoint: http://localhost:%s/v2/", port)

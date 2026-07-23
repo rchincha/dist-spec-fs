@@ -11,8 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 export PATH="${REPO_ROOT}/hack/tools/bin:${PATH}"
 
-CLUSTER_NAME="dist-spec-fs"
-REGISTRY_NAME="dist-spec-fs-registry"
+CLUSTER_NAME="saor"
+REGISTRY_NAME="saor-registry"
 REGISTRY_PORT="5001"
 REPO="myrepo"
 TAG="mytag"
@@ -24,7 +24,7 @@ trap 'rm -rf "${WORK_DIR}"' EXIT
 echo "==> Writing demo payload"
 printf '%s\n' "${MESSAGE}" > "${WORK_DIR}/hello.txt"
 
-# dist-spec-fs archives only the raw files it finds in repo/tag/ - there's no
+# saor archives only the raw files it finds in repo/tag/ - there's no
 # base OS image and the generated config sets no Cmd. So the payload must
 # include its own tiny static binary to act as the container's entrypoint.
 cat > "${WORK_DIR}/main.go" <<'EOF'
@@ -42,7 +42,7 @@ func main() {
 		fmt.Println("failed to read /hello.txt:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("dist-spec-fs kind demo says: %s", data)
+	fmt.Printf("saor kind demo says: %s", data)
 	for {
 		time.Sleep(time.Hour)
 	}
@@ -65,12 +65,12 @@ curl -fsS -T "${WORK_DIR}/hello.txt" "${BASE_URL}/${REPO}/${TAG}/hello.txt"
 curl -fsS -T "${WORK_DIR}/app" "${BASE_URL}/${REPO}/${TAG}/app"
 
 echo "==> Launching ${REPO}:${TAG} as a container in kind"
-kubectl --context "kind-${CLUSTER_NAME}" delete pod dist-spec-fs-demo --ignore-not-found --wait=true
+kubectl --context "kind-${CLUSTER_NAME}" delete pod saor-demo --ignore-not-found --wait=true
 kubectl --context "kind-${CLUSTER_NAME}" apply -f "${SCRIPT_DIR}/demo-pod.yaml"
-kubectl --context "kind-${CLUSTER_NAME}" wait --for=condition=Ready pod/dist-spec-fs-demo --timeout=120s
+kubectl --context "kind-${CLUSTER_NAME}" wait --for=condition=Ready pod/saor-demo --timeout=120s
 
 echo "==> Pod logs (the WebDAV-uploaded file, printed from inside the kind cluster):"
-kubectl --context "kind-${CLUSTER_NAME}" logs dist-spec-fs-demo
+kubectl --context "kind-${CLUSTER_NAME}" logs saor-demo
 
 # Registries alias a moving "latest" tag onto a fixed one; here that's just a
 # symlink on the storage backend (myrepo/latest -> mytag). WebDAV has no verb
@@ -80,9 +80,9 @@ echo "==> Simulating a 'latest' tag: symlinking ${REPO}/latest -> ${TAG} on the 
 docker exec "${REGISTRY_NAME}" ln -sfn "${TAG}" "/data/${REPO}/latest"
 
 echo "==> Launching ${REPO}:latest as a container in kind"
-kubectl --context "kind-${CLUSTER_NAME}" delete pod dist-spec-fs-demo-latest --ignore-not-found --wait=true
+kubectl --context "kind-${CLUSTER_NAME}" delete pod saor-demo-latest --ignore-not-found --wait=true
 kubectl --context "kind-${CLUSTER_NAME}" apply -f "${SCRIPT_DIR}/demo-pod-latest.yaml"
-kubectl --context "kind-${CLUSTER_NAME}" wait --for=condition=Ready pod/dist-spec-fs-demo-latest --timeout=120s
+kubectl --context "kind-${CLUSTER_NAME}" wait --for=condition=Ready pod/saor-demo-latest --timeout=120s
 
 echo "==> Pod logs (same content, resolved through the 'latest' symlink):"
-kubectl --context "kind-${CLUSTER_NAME}" logs dist-spec-fs-demo-latest
+kubectl --context "kind-${CLUSTER_NAME}" logs saor-demo-latest

@@ -1,7 +1,7 @@
-# A Pod whose image is dynamically compiled by dist-spec-fs from files
+# A Pod whose image is dynamically compiled by saor from files
 # dropped into myrepo/mytag/ over WebDAV (see webdav-demo.sh).
 #
-# dist-spec-fs archives raw directory contents into a layer with no
+# saor archives raw directory contents into a layer with no
 # accompanying OS or shell, and the generated image config sets no
 # Cmd/Entrypoint. `command` below must therefore point at a real static
 # binary that was uploaded alongside the payload (see main.go in
@@ -9,9 +9,9 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: dist-spec-fs-demo
+  name: saor-demo
   labels:
-    app: dist-spec-fs-demo
+    app: saor-demo
 spec:
   containers:
     - name: demo

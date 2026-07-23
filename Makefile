@@ -1,4 +1,4 @@
-BINARY_NAME=dist-spec-fs
+BINARY_NAME=saor
 ROOT_DIR=./data
 PORT=8080
 
@@ -43,7 +43,7 @@ tools: ## Download pinned kind/kubectl into hack/tools/bin
 	  chmod +x $(TOOLS_BIN)/kubectl; \
 	else echo "==> kubectl already present"; fi
 
-kind-up: tools ## Build the image, start dist-spec-fs as a kind-wired registry, and create the kind cluster
+kind-up: tools ## Build the image, start saor as a kind-wired registry, and create the kind cluster
 	@test/scripts/setup-kind-registry.sh
 
 kind-demo: kind-up ## Create files via WebDAV and launch them as a container in kind

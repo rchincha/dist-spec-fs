@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-dist-spec-fs
+saor
 
 # Test binary, built with `go test -c`
 *.test

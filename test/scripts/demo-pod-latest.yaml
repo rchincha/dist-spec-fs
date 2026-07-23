@@ -1,13 +1,13 @@
 # Companion to demo-pod.yaml: launches the SAME payload via the "latest"
-# tag, which dist-spec-fs resolves by following a symlink on the storage
+# tag, which saor resolves by following a symlink on the storage
 # backend (myrepo/latest -> mytag) rather than a real directory - the usual
 # way registries alias a moving "latest" tag onto a fixed one.
 apiVersion: v1
 kind: Pod
 metadata:
-  name: dist-spec-fs-demo-latest
+  name: saor-demo-latest
   labels:
-    app: dist-spec-fs-demo-latest
+    app: saor-demo-latest
 spec:
   containers:
     - name: demo

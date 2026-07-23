@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dist-spec-fs/fs"
+	"github.com/saor/fs"
 )
 
 // Server handles HTTP requests matching the OCI Distribution Specification.

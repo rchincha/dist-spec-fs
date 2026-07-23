@@ -5,9 +5,9 @@ setup() {
     export PORT=8082
     mkdir -p "$ROOT_DIR"
     
-    go build -o dist-spec-fs .
+    go build -o saor .
     
-    ./dist-spec-fs --root "$ROOT_DIR" --port "$PORT" > "${BATS_TEST_TMPDIR}/server.log" 2>&1 &
+    ./saor --root "$ROOT_DIR" --port "$PORT" > "${BATS_TEST_TMPDIR}/server.log" 2>&1 &
     export SERVER_PID=$!
     
     sleep 1

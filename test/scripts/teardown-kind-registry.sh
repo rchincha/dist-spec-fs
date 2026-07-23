@@ -8,8 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 export PATH="${REPO_ROOT}/hack/tools/bin:${PATH}"
 
-CLUSTER_NAME="dist-spec-fs"
-REGISTRY_NAME="dist-spec-fs-registry"
+CLUSTER_NAME="saor"
+REGISTRY_NAME="saor-registry"
 
 echo "==> Deleting kind cluster '${CLUSTER_NAME}'"
 kind delete cluster --name "${CLUSTER_NAME}" || true

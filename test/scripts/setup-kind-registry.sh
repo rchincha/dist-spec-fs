@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Stands up a kind cluster that pulls images from dist-spec-fs itself,
+# Stands up a kind cluster that pulls images from saor itself,
 # following the pattern in https://kind.sigs.k8s.io/docs/user/local-registry/
-# — except the "registry" is dist-spec-fs, so anything written to its
+# — except the "registry" is saor, so anything written to its
 # WebDAV endpoint is immediately pullable as an OCI image from inside kind.
 set -o errexit
 set -o nounset
@@ -11,15 +11,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 export PATH="${REPO_ROOT}/hack/tools/bin:${PATH}"
 
-CLUSTER_NAME="dist-spec-fs"
-REGISTRY_NAME="dist-spec-fs-registry"
+CLUSTER_NAME="saor"
+REGISTRY_NAME="saor-registry"
 REGISTRY_PORT="5001"
-IMAGE_TAG="dist-spec-fs:kind"
+IMAGE_TAG="saor:kind"
 
 echo "==> Building ${IMAGE_TAG}"
 docker build -t "${IMAGE_TAG}" "${REPO_ROOT}"
 
-echo "==> Starting ${REGISTRY_NAME} (dist-spec-fs serving WebDAV + the OCI registry)"
+echo "==> Starting ${REGISTRY_NAME} (saor serving WebDAV + the OCI registry)"
 if [ "$(docker inspect -f '{{.State.Running}}' "${REGISTRY_NAME}" 2>/dev/null || true)" != 'true' ]; then
   docker run -d --restart=always \
     -p "127.0.0.1:${REGISTRY_PORT}:8080" \

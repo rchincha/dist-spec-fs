@@ -1,6 +1,6 @@
 # Architecture
 
-`dist-spec-fs` is built on a few core principles: zero-copy data whenever possible, statelessness, and leveraging existing enterprise filesystems.
+`saor` is built on a few core principles: zero-copy data whenever possible, statelessness, and leveraging existing enterprise filesystems.
 
 ## Core Components
 
@@ -17,7 +17,7 @@ It has two main responsibilities:
 - **Blob Serving (`/v2/<repo>/blobs/<digest>`)**: When a client requests a blob by its digest, the server uses the `fs.Indexer` to find the corresponding cached `.tar.gz` archive or config JSON and streams it directly to the client using `http.ServeFile`, supporting Range requests automatically.
 
 ### 4. File Indexer & Caching
-Because OCI clients address blobs by their SHA256 digest, `dist-spec-fs` dynamically archives directories and generates Config JSONs on-the-fly. To prevent hashing and compressing massive directories repeatedly, these generated blobs are stored in a hidden `.cache` directory within the storage root (e.g. `./data/.cache/layers/` and `./data/.cache/configs/`). The indexer maintains an in-memory map of `digest -> path` to quickly serve blobs on subsequent requests. 
+Because OCI clients address blobs by their SHA256 digest, `saor` dynamically archives directories and generates Config JSONs on-the-fly. To prevent hashing and compressing massive directories repeatedly, these generated blobs are stored in a hidden `.cache` directory within the storage root (e.g. `./data/.cache/layers/` and `./data/.cache/configs/`). The indexer maintains an in-memory map of `digest -> path` to quickly serve blobs on subsequent requests. 
 
 ## Concurrency and Scaling
 

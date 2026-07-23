@@ -1,4 +1,4 @@
-module github.com/dist-spec-fs
+module github.com/saor
 
 go 1.26.3
 

@@ -22,9 +22,9 @@ teardown() {
         # passing tests) - gives CI logs something to debug from instead of
         # a bare "status != 0" with no context.
         echo "==> Debug: pods"
-        kubectl --context "kind-dist-spec-fs" get pods -A -o wide 2>&1 || true
+        kubectl --context "kind-saor" get pods -A -o wide 2>&1 || true
         echo "==> Debug: registry container log (tail)"
-        docker logs --tail=100 dist-spec-fs-registry 2>&1 || true
+        docker logs --tail=100 saor-registry 2>&1 || true
         echo "==> Debug: docker ps"
         docker ps -a 2>&1 || true
 
@@ -42,7 +42,7 @@ teardown() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"hello from bats"* ]]
 
-    run kubectl --context "kind-dist-spec-fs" get pod dist-spec-fs-demo -o jsonpath='{.status.phase}'
+    run kubectl --context "kind-saor" get pod saor-demo -o jsonpath='{.status.phase}'
     echo "$output"
     [ "$status" -eq 0 ]
     [ "$output" = "Running" ]
@@ -50,12 +50,12 @@ teardown() {
     # webdav-demo.sh also symlinks myrepo/latest -> mytag on the storage
     # backend and launches a second pod from the "latest" tag as proof the
     # symlink resolves to the same content.
-    run kubectl --context "kind-dist-spec-fs" get pod dist-spec-fs-demo-latest -o jsonpath='{.status.phase}'
+    run kubectl --context "kind-saor" get pod saor-demo-latest -o jsonpath='{.status.phase}'
     echo "$output"
     [ "$status" -eq 0 ]
     [ "$output" = "Running" ]
 
-    run kubectl --context "kind-dist-spec-fs" logs dist-spec-fs-demo-latest
+    run kubectl --context "kind-saor" logs saor-demo-latest
     echo "$output"
     [ "$status" -eq 0 ]
     [[ "$output" == *"hello from bats"* ]]
