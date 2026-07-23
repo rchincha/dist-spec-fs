@@ -1,6 +1,8 @@
 BINARY_NAME=saor
 ROOT_DIR=./data
 PORT=8080
+VERSION ?= $(shell git describe --tags --always --dirty)
+LDFLAGS := -ldflags="-X main.Version=$(VERSION)"
 
 KIND_VERSION    := v0.32.0
 KUBECTL_VERSION := v1.36.2
@@ -15,7 +17,7 @@ all: build
 
 build:
 	@echo "==> Building $(BINARY_NAME)..."
-	go build -o $(BINARY_NAME) .
+	go build $(LDFLAGS) -o $(BINARY_NAME) .
 
 test:
 	@echo "==> Running tests..."

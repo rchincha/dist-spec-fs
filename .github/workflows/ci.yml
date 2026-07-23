@@ -5,6 +5,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  release:
+    types: [published]
 
 jobs:
   build-and-test:
@@ -41,3 +43,36 @@ jobs:
 
     - name: WebDAV -> kind end-to-end test
       run: make kind-test
+
+  release:
+    needs: [build-and-test, kind-e2e]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows, freebsd, darwin]
+        goarch: [amd64, arm64]
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version-file: go.mod
+
+    - name: Build Binary
+      run: |
+        VERSION=${{ github.event.release.tag_name }}
+        if [ -z "$VERSION" ]; then
+          VERSION="dev"
+        fi
+        EXT=""
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          EXT=".exe"
+        fi
+        GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -ldflags="-X main.Version=$VERSION" -o saor-${{ matrix.goos }}-${{ matrix.goarch }}$EXT .
+
+    - name: Upload Release Asset
+      uses: softprops/action-gh-release@v1
+      with:
+        files: saor-${{ matrix.goos }}-${{ matrix.goarch }}*

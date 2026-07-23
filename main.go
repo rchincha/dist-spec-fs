@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -11,14 +12,23 @@ import (
 	"github.com/saor/webdav"
 )
 
+var Version = "dev"
+
 func main() {
 	var rootDir string
 	var port string
+	var showVersion bool
 
 	// Define command-line flags to configure the server's storage location and port.
+	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
 	flag.StringVar(&rootDir, "root", "./data", "Root directory for the filesystem (where native files and folders reside)")
 	flag.StringVar(&port, "port", "8080", "Port to run the server on")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("saor version %s\n", Version)
+		os.Exit(0)
+	}
 
 	// Ensure the root directory exists on startup so WebDAV and OCI don't fail immediately on an empty instance.
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
