@@ -1,6 +1,6 @@
 # saor
 
-`saor` is a Go server that bridges the gap between traditional remote file systems and the Open Container Initiative (OCI) Distribution Specification.
+`saor` - any Storage server As an OCI Registry. It exposes both a filesystem and a container registry simultaneously.
 
 It allows you to use a single highly-available storage backend (like ZFS, BTRFS, or a standard disk) and expose it in two distinct ways simultaneously:
 1. **As a Remote Filesystem**: Mountable via standard WebDAV on Windows, macOS, and Linux.
